@@ -1,5 +1,5 @@
 import os, sys, requests, dropbox
-from random import random
+from random import randint
 
 local_dir = os.environ['HOME']
 filename  = 'sample.png'
@@ -9,12 +9,8 @@ if len(sys.argv) > 1:
         local_dir, filename = os.path.split(file_path)
 local_abs = os.path.join(local_dir, filename)
 
-dest = '/'+str(int(random()*1000000000))+'/'+filename
-DB_TOKEN = os.getenv('PUBDIST_DROPBOX_TOKEN') if 'PUBDIST_DROPBOX_TOKEN' in os.environ.keys() else ''
-BL_TOKEN = os.getenv('PUBDIST_BITLY_TOKEN') if 'PUBDIST_BITLY_TOKEN' in os.environ.keys() else ''
-POST_URL = 'https://api-ssl.bitly.com/v4/shorten'
-
-def upload():
+def upload(dbx, filename):
+    dest = f'/{randint(0, 999999999)}/{filename}'
     with open(local_abs, 'rb') as f:
         try:
             meta = dbx.files_upload(f.read(), dest, mode=dropbox.files.WriteMode('overwrite'))
@@ -28,45 +24,38 @@ def upload():
                 sys.exit("ERROR: Insufficient space.")
             elif err.user_message_text:
                 print(err.user_message_text)
-                sys.exit()
             else:
                 print(err)
-                sys.exit()
 
-def check_metadata(file_path):
+def get_sharable_link(dbx, file_path):
     try:
-        metadata = dbx.files_get_metadata(file_path)
-        return True
-    except dropbox.exceptions.ApiError as err:
-        print(err)
-
-def get_sharable_link(file_path):
-    try:
-        pub_link = dbx.sharing_create_shared_link_with_settings(newfile)
-        print(pub_link.url)
+        pub_link = dbx.sharing_create_shared_link_with_settings(file_path)
         return pub_link.url
     except dropbox.exceptions.ApiError as err:
         print(err)
 
-def shorten_url(BL_TOKEN, public_url, desired_url=None):
+def shorten_url(public_url, desired_url=None):
+    BL_TOKEN = os.environ.get('PUBDIST_BITLY_TOKEN', '')
+    if len(BL_TOKEN)==0:
+        raise ValueError('Dropbox token is not set')
+    POST_URL = 'https://api-ssl.bitly.com/v4/shorten'
     headers = {"Authorization": f"Bearer {BL_TOKEN}", "Content-Type": "application/json"}
     body    = {"domain": "bit.ly", "long_url": public_url}
     res = requests.post(POST_URL, headers=headers, json=body).json()
     return res["link"]
 
-if __name__ == '__main__':
+def upload_dropbox():
+    DB_TOKEN = os.environ.get('PUBDIST_DROPBOX_TOKEN', '')
     if len(DB_TOKEN)==0:
         raise ValueError('Dropbox token is not set')
     with dropbox.Dropbox(DB_TOKEN) as dbx:
-        user = dbx.users_get_current_account()
-        #print(user)
-        newfile = upload()
-        #print('Uploaded file:', newfile)
-        check_metadata(newfile)
-        public_url = get_sharable_link(newfile)
+        dbx.users_get_current_account()
+        newfile = upload(dbx, filename)
+        public_url = get_sharable_link(dbx, newfile)
+    return public_url
 
-    if len(BL_TOKEN)==0:
-        raise ValueError('bitly Token is not set.')
-    else:
-        short_link = shorten_url(BL_TOKEN=BL_TOKEN, public_url=public_url)
-        print(short_link)
+if __name__ == '__main__':
+    public_url = upload_dropbox()
+    print(public_url)
+    short_link = shorten_url(public_url=public_url)
+    print(short_link)
