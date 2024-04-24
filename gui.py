@@ -26,9 +26,6 @@ class MainWindow(qtw.QWidget):
         self.label.resize(box_width, box_height)
         self.label.move(base_x, drag_y)
 
-
-
-
         filepath_x = base_x
         filepath_y = drag_y + box_height + 30
         self.filepath_text = qtw.QTextEdit('File Path:',self)
